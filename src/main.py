@@ -1,5 +1,5 @@
 # Import necessary classes
-from resume_reader import ResumeReader
+from reader import ResumeReader
 from similarity_calculator import SimilarityCalculator
 
 # Path to the resume PDF
