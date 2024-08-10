@@ -1,155 +1,180 @@
-# from PyPDF2 import PdfReader
-# from bidi.algorithm import get_display
-#
-# # reader = PdfReader("../resumes/3.pdf")
-#
-# def extract_headings_from_pdf(pdf_path):
-#     reader = PdfReader(pdf_path)
-#     headings = []
-#
-#     for page in reader.pages:
-#         text = page.extract_text()
-#         for line in text.split('\n'):
-#             if line.isupper():  # Assuming headings are in uppercase
-#                 headings.append(line)
-#
-#     return headings
-#
-#
-# pdf_path = '../resumes/3.pdf'
-# headings = extract_headings_from_pdf(pdf_path)
-#
-# # print(get_display(page.extract_text()))
-# print(headings)
-# print(type(page.extract_text()))
-
-import fitz  # PyMuPDF
-
-path = '../resumes/2.pdf'
-
-
-def extract_headings_and_content(file_path: str) -> dict:
-    """
-    Extract headings and their content from a PDF file and return them as a dictionary.
-
-    :param file_path: Path to the PDF file.
-    :return: Dictionary with headings as keys and their content as values.
-    """
-    headings_content = {}
-    current_heading = None
-
-    try:
-        with fitz.open(file_path) as doc:
-            for page in doc:
-                # Extract text blocks from the page
-                blocks = page.get_text("dict")["blocks"]
-
-                for block in blocks:
-                    if "lines" in block:
-                        for line in block["lines"]:
-                            for span in line["spans"]:
-                                text = span["text"].strip()
-                                if not text:
-                                    continue
-
-                                # Identify headings by larger font size
-                                if span["size"] > 12:
-                                    current_heading = text
-                                    if current_heading not in headings_content:
-                                        headings_content[current_heading] = []
-                                elif current_heading:
-                                    headings_content[current_heading].append(text)
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-    # Convert lists of strings into single strings for each heading
-    for heading in headings_content:
-        headings_content[heading] = ' '.join(headings_content[heading])
-
-    return headings_content
-
-
-headings_dict = extract_headings_and_content(path)
-print(headings_dict)
-
+import fitz  # PyMuPDF for PDF reading
 import re
-from utils import read_pdf, preprocess_text
-
-
+from hazm import Normalizer, WordTokenizer, stopwords_list, Lemmatizer
+from skills import ds_keywords, web_keywords, android_keywords, ios_keywords, uiux_keywords, devops_keywords
+from name_detection.persian_names import extract_names
+from collections import Counter
 class ResumeReader:
-    def __init__(self, file_path: str):
-        self.file_path = file_path
-        self.text = read_pdf(file_path)
-        self.data = self.extract_information()
-
-    def extract_information(self) -> dict:
-        """
-        Extract key information from the resume.
-
-        :return: Dictionary with extracted information.
-        """
-        data = {
-            "name": self.extract_name(),
-            "email": self.extract_email(),
-            "location": self.extract_location(),
-            "skills": self.extract_skills(),
-            # Add more fields as needed
+    def __init__(self, resume_path):
+        self.resume_path = resume_path
+        self.normalizer = Normalizer()
+        self.lemmatizer = Lemmatizer()
+        self.word_tokenizer = WordTokenizer()
+        self.stopwords = set(stopwords_list())
+        self.quality_mapping = {
+            'کم': 1, 'مبتدی': 1, 'beginner': 1,
+            'متوسط': 2, 'intermediate': 2,
+            'زیاد': 3, 'پیشرفته': 3, 'advance': 3
         }
-        return data
+    def extract_text_from_pdf(self):
+        """Extract text from a PDF file located at resume_path."""
+        document = fitz.open(self.resume_path)
+        text = "".join(page.get_text() for page in document)
+        return text
 
-    def extract_name(self) -> str:
-        """
-        Extract the name from the resume.
+    def get_data_raw(self):
+        """Get raw data from the resume."""
+        text = self.extract_text_from_pdf()
+        return text
 
-        :return: Extracted name.
-        """
-        # Assuming the name is the first uppercase text in the resume
-        match = re.search(r'\b[آ-ی]+\b', self.text)
-        return match.group(0) if match else ""
+    def processed_data(self):
+        """Get processed data from the resume."""
+        text = self.extract_text_from_pdf()
+        text = re.sub('http\S+\s*', ' ', text)  # remove URLs
+        text = re.sub('RT|cc', ' ', text)  # remove RT and cc
+        text = re.sub('#\S+', '', text)  # remove hashtags
+        text = re.sub('@\S+', '  ', text)  # remove mentions
+        text = re.sub('[%s]' % re.escape("""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""), ' ',
+                            text)  # remove punctuations
+        text = self.normalizer.normalize(text)
+        text = self.lemmatizer.lemmatize(text)
+        return text
 
-    def extract_email(self) -> str:
-        """
-        Extract the email from the resume.
+    def extract_skills(self, text):
+        """Extract skills from the resume text based on predefined categories."""
+        skills = {
+            'Data Science': [],
+            'Web Development': [],
+            'Android Development': [],
+            'iOS Development': [],
+            'UI/UX Design': [],
+            'DevOps': []
+        }
 
-        :return: Extracted email.
-        """
-        match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', self.text)
-        return match.group(0) if match else ""
+        skills_quality = {}  # Dictionary to hold skills and their quality
 
-    def extract_location(self) -> str:
-        """
-        Extract the location from the resume.
 
-        :return: Extracted location.
-        """
-        # Add logic to extract location based on known patterns or keywords
-        return ""
 
-    def extract_skills(self) -> dict:
-        """
-        Extract skills and their levels from the resume.
+        # Convert text to lowercase
+        text = text.lower()
 
-        :return: Dictionary of skills and their levels.
-        """
-        skills = {}
-        # Assuming skills are listed in a specific section
-        skill_section = re.search(r'(?<=مهارتها)(.*?)(?=\n\n|\Z)', self.text, re.DOTALL)
-        if skill_section:
-            skill_lines = skill_section.group(0).split('\n')
-            for line in skill_lines:
-                parts = line.split(':')
-                if len(parts) == 2:
-                    skill, level = parts
-                    skills[skill.strip()] = level.strip()
-                else:
-                    skills[line.strip()] = "Unknown"
-        return skills
+        # Check for each category of skills
+        for keyword in ds_keywords:
+            if keyword.lower() in text:
+                skills['Data Science'].append(keyword)
+                # Check for quality
+                quality = self.extract_quality(text, keyword)
+                if quality:
+                    skills_quality[keyword] = quality
 
-    def get_data(self) -> dict:
-        """
-        Get the extracted data.
+        for keyword in web_keywords:
+            if keyword.lower() in text:
+                skills['Web Development'].append(keyword)
+                quality = self.extract_quality(text, keyword)
+                if quality:
+                    skills_quality[keyword] = quality
 
-        :return: Extracted data dictionary.
-        """
-        return self.data
+        for keyword in android_keywords:
+            if keyword.lower() in text:
+                skills['Android Development'].append(keyword)
+                quality = self.extract_quality(text, keyword)
+                if quality:
+                    skills_quality[keyword] = quality
+
+        for keyword in ios_keywords:
+            if keyword.lower() in text:
+                skills['iOS Development'].append(keyword)
+                quality = self.extract_quality(text, keyword)
+                if quality:
+                    skills_quality[keyword] = quality
+
+        for keyword in uiux_keywords:
+            if keyword.lower() in text:
+                skills['UI/UX Design'].append(keyword)
+                quality = self.extract_quality(text, keyword)
+                if quality:
+                    skills_quality[keyword] = quality
+
+        for keyword in devops_keywords:
+            if keyword.lower() in text:
+                skills['DevOps'].append(keyword)
+                quality = self.extract_quality(text, keyword)
+                if quality:
+                    skills_quality[keyword] = quality
+
+        return skills, skills_quality
+
+    def extract_quality(self, text, skill):
+        """Extract the quality of a skill from the text."""
+        # Define patterns to search for quality indicators
+        quality_patterns = r'(?<=\b' + re.escape(
+            skill) + r'\b).*?(\d|کم|مبتدی|متوسط|زیاد|پیشرفته|beginner|intermediate|advance)'
+
+        match = re.search(quality_patterns, text)
+        if match:
+            quality_str = match.group(0).strip()
+            # Check if the quality is numeric or a keyword
+            for key, value in self.quality_mapping.items():
+                if key in quality_str:
+                    return value
+            if quality_str.isdigit():
+                return int(quality_str)
+
+        return None  # Return None if no quality found
+
+    def extract_contact_info(self, text):
+        """Extract contact information from the resume text."""
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        phone_pattern = r'\b\d{11}\b'
+
+        email = re.search(email_pattern, text)
+        phone = re.search(phone_pattern, text)
+        name = extract_names(text)
+
+        contact_info = {
+            'email': email.group() if email else None,
+            'phone': phone.group() if phone else None,
+            'name': name
+        }
+
+        return contact_info
+
+    def extract_age(self, text):
+        """Extract age from the resume text."""
+        age_pattern = r'\b([\d۰-۹]{1,2})/([\d۰-۹]{4})\b'  # Matches formats like 8/2000, 12/1375, or ۸/۲۰۰۰, ۱۲/۱۳۷۵
+        year_pattern = r'\b([\d۰-۹]{4})\b'  # Matches 4-digit years like 1403 or ۱۳۸۲
+
+        age_match = re.search(age_pattern, text)
+        year_matches = re.findall(year_pattern, text)  # Find all 4-digit numbers
+
+        current_year = 1403  # Replace with the current year in Shamsi
+
+        if age_match:
+            age = int(age_match.group(1))  # Extracted age
+            birth_year = int(age_match.group(2))  # Extracted birth year
+            if 18 < age < 40:  # Check if age is within the specified range
+                return age
+
+        elif year_matches:
+            birth_year = min([int(year) for year in year_matches])  # Find the lowest year
+            calculated_age = current_year - birth_year  # Calculate age from birth year
+            if 18 < calculated_age < 40:  # Check if calculated age is within the specified range
+                return calculated_age
+
+        return None  # Return None if no valid age is found
+
+    def full_features(self):
+        # Extract skills from resume
+        resume_data = self.get_data_raw()
+        resume_skills, skills_quality = self.extract_skills(resume_data)
+
+        # Extract contact information from resume
+        resume_contact_info = self.extract_contact_info(resume_data)
+
+        # Extract age from resume
+        resume_age = self.extract_age(resume_data)
+
+        return resume_skills, skills_quality, resume_contact_info, resume_age
+
+
+
