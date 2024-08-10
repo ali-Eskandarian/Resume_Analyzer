@@ -4,7 +4,7 @@ from reader import ResumeReader
 
 
 def main():
-    resume_path = '../resumes/نرجس_محسنی پور_Persian_Resume.pdf'
+    resume_path = '../resumes/---.pdf'
     job_description_path = "../description_position.txt"
 
 
