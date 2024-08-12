@@ -1,7 +1,12 @@
 from sklearn.metrics.pairwise import cosine_similarity
 from utils import flatten_list
-from hazm import Normalizer, WordTokenizer, stopwords_list, Lemmatizer
+from hazm import Normalizer, WordTokenizer, stopwords_list
 from collections import Counter
+from hdbscan import HDBSCAN
+from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
+# from sklearn.externals import joblib
+import numpy as np
+import joblib
 
 
 class SimilarityCalculator:
@@ -40,5 +45,40 @@ class KeywordExtractor:
         return keywords
 
 
+class ClusterModel:
+    def __init__(self, min_cluster_size=5):
+        self.min_cluster_size = min_cluster_size
+        self.models = {
+            'KMeans': KMeans(),
+            'HDBSCAN': HDBSCAN(min_cluster_size=min_cluster_size)
+        }
+        self.clustered_data = {}
+        self.data_model = None
 
+    def forward(self, data):
+        """Fit the clustering models to the provided data."""
+        self.data_model = data.drop('resume', axis=1).values
 
+        for model_name, model in self.models.items():
+            labels_ = model.fit_predict(self.data_model)
+            data[f'{model_name}'] = labels_
+            self.clustered_data[model_name] = labels_
+
+        # Save the updated DataFrame
+        data.to_csv('clustered_data.csv', index=False)
+        return data
+
+    def save(self, directory):
+        """Save all fitted models to the specified directory."""
+        for model_name, model in self.models.items():
+            joblib.dump(model, f"{directory}/{model_name}_model.pkl")
+
+    def predict(self, new_data):
+        """Predict the cluster for a new data point using all models."""
+        predictions = {}
+        for model_name, model in self.models.items():
+            if model_name == 'KMeans':
+                predictions[model_name] = model.predict(new_data.reshape(1, -1))[0]
+            else:
+                predictions[model_name] = model.predict([new_data])[0]
+        return predictions

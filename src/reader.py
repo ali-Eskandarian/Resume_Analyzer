@@ -1,21 +1,22 @@
+import json
 import fitz  # PyMuPDF for PDF reading
 import re
 from hazm import Normalizer, WordTokenizer, stopwords_list, Lemmatizer
-from skills import ds_keywords, web_keywords, android_keywords, ios_keywords, uiux_keywords, devops_keywords
-from name_detection.persian_names import extract_names
-from collections import Counter
+from utils import extract_age, extract_contact_info, extract_skills, flatten_list
+import os
+from models import SimilarityCalculator, KeywordExtractor
+import pandas as pd
+from tqdm import tqdm
+
+
 class ResumeReader:
     def __init__(self, resume_path):
-        self.resume_path = resume_path
-        self.normalizer = Normalizer()
-        self.lemmatizer = Lemmatizer()
+        self.resume_path    = resume_path
+        self.normalizer     = Normalizer()
+        self.lemmatizer     = Lemmatizer()
         self.word_tokenizer = WordTokenizer()
-        self.stopwords = set(stopwords_list())
-        self.quality_mapping = {
-            'کم': 1, 'مبتدی': 1, 'beginner': 1,
-            'متوسط': 2, 'intermediate': 2,
-            'زیاد': 3, 'پیشرفته': 3, 'advance': 3
-        }
+        self.stopwords      = set(stopwords_list())
+
     def extract_text_from_pdf(self):
         """Extract text from a PDF file located at resume_path."""
         document = fitz.open(self.resume_path)
@@ -40,141 +41,128 @@ class ResumeReader:
         text = self.lemmatizer.lemmatize(text)
         return text
 
-    def extract_skills(self, text):
-        """Extract skills from the resume text based on predefined categories."""
-        skills = {
-            'Data Science': [],
-            'Web Development': [],
-            'Android Development': [],
-            'iOS Development': [],
-            'UI/UX Design': [],
-            'DevOps': []
-        }
-
-        skills_quality = {}  # Dictionary to hold skills and their quality
-
-
-
-        # Convert text to lowercase
-        text = text.lower()
-
-        # Check for each category of skills
-        for keyword in ds_keywords:
-            if keyword.lower() in text:
-                skills['Data Science'].append(keyword)
-                # Check for quality
-                quality = self.extract_quality(text, keyword)
-                if quality:
-                    skills_quality[keyword] = quality
-
-        for keyword in web_keywords:
-            if keyword.lower() in text:
-                skills['Web Development'].append(keyword)
-                quality = self.extract_quality(text, keyword)
-                if quality:
-                    skills_quality[keyword] = quality
-
-        for keyword in android_keywords:
-            if keyword.lower() in text:
-                skills['Android Development'].append(keyword)
-                quality = self.extract_quality(text, keyword)
-                if quality:
-                    skills_quality[keyword] = quality
-
-        for keyword in ios_keywords:
-            if keyword.lower() in text:
-                skills['iOS Development'].append(keyword)
-                quality = self.extract_quality(text, keyword)
-                if quality:
-                    skills_quality[keyword] = quality
-
-        for keyword in uiux_keywords:
-            if keyword.lower() in text:
-                skills['UI/UX Design'].append(keyword)
-                quality = self.extract_quality(text, keyword)
-                if quality:
-                    skills_quality[keyword] = quality
-
-        for keyword in devops_keywords:
-            if keyword.lower() in text:
-                skills['DevOps'].append(keyword)
-                quality = self.extract_quality(text, keyword)
-                if quality:
-                    skills_quality[keyword] = quality
-
-        return skills, skills_quality
-
-    def extract_quality(self, text, skill):
-        """Extract the quality of a skill from the text."""
-        # Define patterns to search for quality indicators
-        quality_patterns = r'(?<=\b' + re.escape(
-            skill) + r'\b).*?(\d|کم|مبتدی|متوسط|زیاد|پیشرفته|beginner|intermediate|advance)'
-
-        match = re.search(quality_patterns, text)
-        if match:
-            quality_str = match.group(0).strip()
-            # Check if the quality is numeric or a keyword
-            for key, value in self.quality_mapping.items():
-                if key in quality_str:
-                    return value
-            if quality_str.isdigit():
-                return int(quality_str)
-
-        return None  # Return None if no quality found
-
-    def extract_contact_info(self, text):
-        """Extract contact information from the resume text."""
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-        phone_pattern = r'\b\d{11}\b'
-
-        email = re.search(email_pattern, text)
-        phone = re.search(phone_pattern, text)
-        name = extract_names(text)
-
-        contact_info = {
-            'email': email.group() if email else None,
-            'phone': phone.group() if phone else None,
-            'name': name
-        }
-
-        return contact_info
-
-    def extract_age(self, text):
-        """Extract age from the resume text."""
-        age_pattern = r'\b([\d۰-۹]{1,2})/([\d۰-۹]{4})\b'  # Matches formats like 8/2000, 12/1375, or ۸/۲۰۰۰, ۱۲/۱۳۷۵
-        year_pattern = r'\b([\d۰-۹]{4})\b'  # Matches 4-digit years like 1403 or ۱۳۸۲
-
-        age_match = re.search(age_pattern, text)
-        year_matches = re.findall(year_pattern, text)  # Find all 4-digit numbers
-
-        current_year = 1403  # Replace with the current year in Shamsi
-
-        if age_match:
-            age = int(age_match.group(1))  # Extracted age
-            birth_year = int(age_match.group(2))  # Extracted birth year
-            if 18 < age < 40:  # Check if age is within the specified range
-                return age
-
-        elif year_matches:
-            birth_year = min([int(year) for year in year_matches])  # Find the lowest year
-            calculated_age = current_year - birth_year  # Calculate age from birth year
-            if 18 < calculated_age < 40:  # Check if calculated age is within the specified range
-                return calculated_age
-
-        return None  # Return None if no valid age is found
-
     def full_features(self):
         # Extract skills from resume
         resume_data = self.get_data_raw()
-        resume_skills, skills_quality = self.extract_skills(resume_data)
+        resume_skills, skills_quality = extract_skills(resume_data)
 
         # Extract contact information from resume
-        resume_contact_info = self.extract_contact_info(resume_data)
+        resume_contact_info = extract_contact_info(resume_data)
 
         # Extract age from resume
-        resume_age = self.extract_age(resume_data)
+        resume_age = extract_age(resume_data)
 
         return resume_skills, skills_quality, resume_contact_info, resume_age
 
 
+class ClusteringResumeReader(ResumeReader):
+    def __init__(self, job_description_path, resumes_directory, nums=100):
+        self.job_description_path = job_description_path
+        self.resumes_directory = resumes_directory
+        self.nums = nums
+        super().__init__(None)  # Call parent constructor with no resume path
 
+    def read_job_description(self):
+        """Read the job description from the specified path."""
+        with open(self.job_description_path, 'r', encoding='utf-8') as f:
+            job_description = f.read()
+        return job_description
+
+    def load_resumes(self):
+        """Load all resumes from the specified directory and return as ResumeReader objects."""
+        resumes = []
+        for filename in os.listdir(self.resumes_directory):
+            if filename.endswith('.pdf'):
+                resume_ = os.path.join(self.resumes_directory, filename)
+                resumes.append(resume_)
+        return resumes
+
+    def process_resumes(self):
+        """Process each resume to create the final data for clustering."""
+        resumes = self.load_resumes()
+        data = []
+
+        # Extract keywords from job description
+        job_description = self.read_job_description()
+        job_keyword_extractor = KeywordExtractor(Lemmatizer().lemmatize(Normalizer().normalize(job_description)))
+        skills_job, _ = extract_skills(job_description)
+        skills_job = set(flatten_list(list(skills_job.values())))
+
+        for resume_path in tqdm(resumes):
+            resume_reader = ResumeReader(resume_path)
+            resume_skills, skills_quality, _, _ = resume_reader.full_features()
+            resume_skills = flatten_list(list(resume_skills.values()))
+            resume_data_processed = resume_reader.processed_data()
+
+            # Extract keywords from resume
+            resume_keyword_extractor = KeywordExtractor(resume_data_processed)
+            resume_keywords = resume_keyword_extractor.extract_keywords(self.nums)
+            added_resume_keyword = resume_keywords + resume_skills
+            job_description_keywords = job_keyword_extractor.extract_keywords(len(added_resume_keyword))
+
+            # Calculate similarity
+            similarity_calculator = SimilarityCalculator(added_resume_keyword, job_description_keywords)
+            cosine_sim = similarity_calculator.calculate_cosine_similarity()
+            jaccard_sim = similarity_calculator.calculate_jaccard_similarity()
+
+            # Prepare the row for the dataset
+            row = [os.path.splitext(os.path.basename(resume_path))[0], cosine_sim, jaccard_sim]
+
+            # Add skills presence as additional columns
+            for skill in skills_job:
+                row.append(1 if skill in resume_skills else 0)
+            data.append(row)
+
+
+        # Create a DataFrame with the specified columns
+        columns = ['resume', 'cosine_sim', 'jaccard_sim'] + list(skills_job)
+        df = pd.DataFrame(data, columns=columns)
+
+        return df
+
+
+class SingleResumeReader:
+    def __init__(self, job_description_path, resume_path, nums=100):
+        self.job_description_path = job_description_path
+        self.resume_path = resume_path
+        self.nums = nums
+        self.resume_reader = ResumeReader(resume_path)
+
+    def read_job_description(self):
+        """Read the job description from the specified path."""
+        with open(self.job_description_path, 'r', encoding='utf-8') as f:
+            job_description = f.read()
+        return job_description
+
+    def get_resume_features_as_json(self):
+        """Get features of the resume and similarities as a JSON object."""
+        resume_skills, skills_quality, resume_contact_info, resume_age = self.resume_reader.full_features()
+        resume_skills = list(resume_skills.values())
+        resume_data_processed = self.resume_reader.processed_data()
+
+        # Extract keywords from job description
+        job_description = self.read_job_description()
+        job_keyword_extractor = KeywordExtractor(Lemmatizer().lemmatize(Normalizer().normalize(job_description)))
+        skills_job, _ = extract_skills(job_description)
+        skills_job = flatten_list(list(skills_job.values()))
+
+        # Extract keywords from resume
+        resume_keyword_extractor = KeywordExtractor(resume_data_processed)
+        resume_keywords = resume_keyword_extractor.extract_keywords(self.nums)
+        added_resume_keyword = resume_keywords + resume_skills
+        job_description_keywords = job_keyword_extractor.extract_keywords(len(added_resume_keyword))
+
+        # Calculate similarity
+        similarity_calculator = SimilarityCalculator(added_resume_keyword, job_description_keywords)
+        cosine_sim = similarity_calculator.calculate_cosine_similarity()
+        jaccard_sim = similarity_calculator.calculate_jaccard_similarity()
+
+        resume_data = {
+            'skills': resume_skills,
+            'skills_quality': skills_quality,
+            'contact_info': resume_contact_info,
+            'age': resume_age,
+            'cosine_similarity': cosine_sim,
+            'jaccard_similarity': jaccard_sim
+        }
+        return json.dumps(resume_data, ensure_ascii=False)

@@ -1,44 +1,53 @@
-from hazm import Normalizer, Lemmatizer
-from models import SimilarityCalculator, KeywordExtractor
-from reader import ResumeReader
+import pandas as pd
+
+from reader import SingleResumeReader, ClusteringResumeReader
+from models import ClusterModel
+from flask import Flask, request, jsonify
+from utils import visualize_data_with_umap
+
+# app = Flask(__name__)
+
+# UPLOAD_FOLDER = 'uploads'
+# ALLOWED_EXTENSIONS = {'pdf'}
+
+# app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
+# def allowed_file(filename):
+#     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# @app.route('/main', methods=['POST'])
 def main():
-    resume_path = '../resumes/---.pdf'
+    # if 'directory' not in request.form:
+        # return jsonify({'error': 'No directory specified'}), 400
+
+    # directory_path = request.form['directory']
+    
+    resume_path = '../resumes/نرجس_محسنی پور_Persian_Resume.pdf'
+    resume_dir = '../resumes/'
     job_description_path = "../description_position.txt"
 
+    # resume_analyzer = SingleResumeReader(job_description_path, resume_path)
+    # print(resume_analyzer.get_resume_features_as_json())
+    #
+    # dataset_cluster = ClusteringResumeReader(job_description_path, resume_dir)
+    # data = dataset_cluster.process_resumes()
+    # data.to_csv("output_1.csv")
 
-    # Read job description
-    with open(job_description_path, 'r', encoding='utf-8') as f:
-        job_description = f.read()
+    data = pd.read_csv("output.csv")
+    visualize_data_with_umap(data)
 
-    # Extract information from the resume
-    resume_reader = ResumeReader(resume_path)
-    resume_skills, skills_quality, resume_contact_info, resume_age = resume_reader.full_features()
-    resume_data_processed = resume_reader.processed_data()
+    # Initialize the clustering model
+    cluster_model = ClusterModel()
 
-    # Extract keywords from resume
-    resume_keyword_extractor = KeywordExtractor(resume_data_processed)
-    resume_keywords = resume_keyword_extractor.extract_keywords(100)
-    added_resume_keyword = resume_keywords+list(resume_skills.values())
+    # Fit the model with the data
+    cluster_model.forward(data)
 
-    # Extract keywords from job description
-    job_keyword_extractor = KeywordExtractor(Lemmatizer().lemmatize(Normalizer().normalize(job_description)))
-    job_description_keywords = job_keyword_extractor.extract_keywords(len(added_resume_keyword))
+    # Save the models
+    cluster_model.save('../saved_model')
 
-    # Calculate similarity
-    similarity_calculator = SimilarityCalculator(added_resume_keyword, job_description_keywords)
-    cosine_sim = similarity_calculator.calculate_cosine_similarity()
-    jaccard_sim = similarity_calculator.calculate_jaccard_similarity()
+    print(1)
 
-    print(f"Resume Keywords: {resume_keywords}")
-    print(f"Job Description Keywords: {job_description_keywords}")
-    print(f"Resume Skills: {resume_skills}")
-    print(f"Resume Skills Quality: {skills_quality}")
-    print(f"Resume Contact Info: {resume_contact_info}")
-    print(f"Resume Age: {resume_age}")
-    print(f"Cosine Similarity: {cosine_sim}")
-    print(f"Jaccard Similarity: {jaccard_sim}")
 
 if __name__ == "__main__":
     main()
