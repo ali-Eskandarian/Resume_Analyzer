@@ -3,7 +3,7 @@
 ## Introduction
 The Resume Analyzer is a powerful tool designed to help job seekers and recruiters streamline the resume screening process. By leveraging advanced natural language processing techniques, this application extracts key features from resumes and job descriptions, enabling users to quickly identify the most relevant candidates for a particular position. With its intuitive interface and robust analytical capabilities, the Resume Analyzer aims to revolutionize the way resumes are evaluated and matched with job opportunities.
 
-![Image description here](path/to/your/image.png) <!-- Add your image path here -->
+![Flowchart](flowchart.png) 
 
 ## Installation
 To set up the Resume Analyzer, follow these simple steps:
