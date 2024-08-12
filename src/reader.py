@@ -1,5 +1,5 @@
 import json
-import fitz  # PyMuPDF for PDF reading
+import fitz
 import re
 from hazm import Normalizer, WordTokenizer, stopwords_list, Lemmatizer
 from utils import extract_age, extract_contact_info, extract_skills, flatten_list
@@ -108,14 +108,18 @@ class ClusteringResumeReader(ResumeReader):
             # Prepare the row for the dataset
             row = [os.path.splitext(os.path.basename(resume_path))[0], cosine_sim, jaccard_sim]
 
+            score = (cosine_sim * 9 + jaccard_sim) * 5
             # Add skills presence as additional columns
             for skill in skills_job:
+                if skill in resume_skills:
+                    score += 50 / len(skills_job)
                 row.append(1 if skill in resume_skills else 0)
+            row.append(score)
             data.append(row)
 
 
         # Create a DataFrame with the specified columns
-        columns = ['resume', 'cosine_sim', 'jaccard_sim'] + list(skills_job)
+        columns = ['resume', 'cosine_sim', 'jaccard_sim'] + list(skills_job) + ['score']
         df = pd.DataFrame(data, columns=columns)
 
         return df
@@ -137,7 +141,7 @@ class SingleResumeReader:
     def get_resume_features_as_json(self):
         """Get features of the resume and similarities as a JSON object."""
         resume_skills, skills_quality, resume_contact_info, resume_age = self.resume_reader.full_features()
-        resume_skills = list(resume_skills.values())
+        resume_skills = flatten_list(list(resume_skills.values()))
         resume_data_processed = self.resume_reader.processed_data()
 
         # Extract keywords from job description
@@ -157,12 +161,19 @@ class SingleResumeReader:
         cosine_sim = similarity_calculator.calculate_cosine_similarity()
         jaccard_sim = similarity_calculator.calculate_jaccard_similarity()
 
+        # Calculate score
+        score = (cosine_sim*9+jaccard_sim)*5
+        for skill in skills_job:
+            if skill in resume_skills:
+                score += 50/len(skills_job)
+
         resume_data = {
             'skills': resume_skills,
             'skills_quality': skills_quality,
             'contact_info': resume_contact_info,
             'age': resume_age,
-            'cosine_similarity': cosine_sim,
-            'jaccard_similarity': jaccard_sim
+            'cosine_similarity': float(cosine_sim),
+            'jaccard_similarity': jaccard_sim,
+            'final_score(%)': score
         }
         return json.dumps(resume_data, ensure_ascii=False)

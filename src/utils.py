@@ -1,4 +1,4 @@
-import fitz  # PyMuPDF
+import fitz
 import re
 from name_detection.persian_names import extract_names
 from skills import ds_keywords, web_keywords, android_keywords, ios_keywords, uiux_keywords, devops_keywords
@@ -75,25 +75,37 @@ def extract_age(text):
     """Extract age from the resume text."""
     age_pattern = r'\b([\d۰-۹]{1,2})/([\d۰-۹]{4})\b'  # Matches formats like 8/2000, 12/1375, or ۸/۲۰۰۰, ۱۲/۱۳۷۵
     year_pattern = r'\b([\d۰-۹]{4})\b'  # Matches 4-digit years like 1403 or ۱۳۸۲
+    age_year_pattern = r'\b([\d۰-۹]{2})\b'  # Matches 4-digit years like 1403 or ۱۳۸۲
 
     age_match = re.search(age_pattern, text)
     year_matches = re.findall(year_pattern, text)  # Find all 4-digit numbers
+    age_year_pattern_matches = re.findall(age_year_pattern, text)  # Find all 2-digit numbers
 
-    current_year = 1403  # Replace with the current year in Shamsi
-
+    current_year = 1403
+    calculated_age = None
     if age_match:
-        age = int(age_match.group(1))  # Extracted age
+        calculated_age = int(age_match.group(1))  # Extracted age
         birth_year = int(age_match.group(2))  # Extracted birth year
-        if 18 < age < 40:  # Check if age is within the specified range
-            return age
+        if 18 < calculated_age < 40:  # Check if age is within the specified range
+            return calculated_age
+        else:
+            calculated_age = None
 
     elif year_matches:
         birth_year = min([int(year) for year in year_matches])  # Find the lowest year
         calculated_age = current_year - birth_year  # Calculate age from birth year
         if 18 < calculated_age < 40:  # Check if calculated age is within the specified range
             return calculated_age
+        else:
+            calculated_age = None
 
-    return None  # Return None if no valid age is found
+    if calculated_age is None:
+        age_candidates = [int(year) for year in age_year_pattern_matches]
+        for calculated_age in age_candidates:
+            if 40 > calculated_age > 18:
+                return calculated_age
+
+    return calculated_age
 
 
 def extract_quality(text, skill):
@@ -182,6 +194,7 @@ def extract_skills(text):
                 skills_quality[keyword] = quality
 
     return skills, skills_quality
+
 
 
 def visualize_data_with_umap(data, output_filename='umap_visualization.png'):
