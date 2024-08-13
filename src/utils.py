@@ -6,7 +6,8 @@ import umap
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-
+import nltk
+import random
 
 def flatten_list(nested_list):
     """
@@ -242,6 +243,56 @@ def extract_skills(text):
 
     return skills, skills_quality
 
+
+def extract_candidates(tagged, grammar):
+    """
+    Extract noun phrase candidates from tagged sentences using specified grammar.
+
+    Parameters:
+    tagged (list of list of tuples): A list of tagged sentences (word, tag pairs).
+    grammar (str): Grammar rules for identifying noun phrases.
+
+    Returns:
+    list: Unique noun phrase candidates with 5 or fewer words.
+    """
+    keyphrase_candidate = set()  # Initialize a set to hold unique candidates
+    np_parser = nltk.RegexpParser(grammar)  # Create a parser with the provided grammar
+    trees = np_parser.parse_sents(tagged)  # Parse the tagged sentences into trees
+
+    for tree in trees:
+        for subtree in tree.subtrees(filter=lambda t: t.label() == 'NP'):  # For each noun phrase
+            # Concatenate the tokens in the noun phrase with a space
+            keyphrase_candidate.add(' '.join(word for word, tag in subtree.leaves()))
+
+    # Filter candidates to include only those with 5 or fewer words
+    keyphrase_candidate = {kp for kp in keyphrase_candidate if len(kp.split()) <= 5}
+    return list(keyphrase_candidate)
+
+
+def equalize_keyword_lengths(resume_keywords, job_description_keywords):
+    """
+    Equalizes the lengths of two lists by appending a filler string to the shorter list.
+
+    Parameters:
+    resume_keywords (list): A list of keywords extracted from a resume.
+    job_description_keywords (list): A list of keywords extracted from a job description.
+
+    Returns:
+    tuple: A tuple containing the modified resume_keywords and job_description_keywords lists.
+    """
+    # Get the lengths of both lists
+    len_resume = len(resume_keywords)
+    len_job_description = len(job_description_keywords)
+
+    # Determine the difference in lengths
+    if len_resume < len_job_description:
+        # Append random elements from job_description_keywords to resume_keywords
+        resume_keywords.extend(random.sample(job_description_keywords, len_job_description - len_resume))
+    elif len_job_description < len_resume:
+        # Append random elements from resume_keywords to job_description_keywords
+        job_description_keywords.extend(random.sample(resume_keywords, len_resume - len_job_description))
+
+    return resume_keywords, job_description_keywords
 
 
 def visualize_data_with_umap(data, output_filename='../umap_visualization.png'):

@@ -1,11 +1,11 @@
 from sklearn.metrics.pairwise import cosine_similarity
-from hazm import Normalizer, WordTokenizer, stopwords_list, WordEmbedding
+from hazm import *
 from collections import Counter
 from hdbscan import HDBSCAN
 from sklearn.cluster import KMeans
 import numpy as np
 import joblib
-
+from utils  import extract_candidates, equalize_keyword_lengths
 
 class SimilarityCalculator:
     def __init__(self, resume_keywords, job_description_keywords, embedding_method='model'):
@@ -16,8 +16,10 @@ class SimilarityCalculator:
         :param job_description_keywords: list - A list of keywords extracted from the job description.
         :param embedding_method: str - The method to use for word embedding (default is 'model').
         """
-        self.resume_keywords = resume_keywords
-        self.job_description_keywords = job_description_keywords
+        self.resume_keywords, self.job_description_keywords = equalize_keyword_lengths(
+            resume_keywords,
+            job_description_keywords
+        )
         if embedding_method=='model':
             self.word_embedding = WordEmbedding(model_type='fasttext')
             self.word_embedding.load_model('../saved_model/word2vec_model.bin')
@@ -32,7 +34,7 @@ class SimilarityCalculator:
         vectors = []
         for keyword in keywords:
             try:
-                vector = self.word_embedding.get_normal_vector(keyword)  # Get the normalized vector for the keyword
+                vector = self.word_embedding[keyword]  # Get the normalized vector for the keyword
                 vector = np.expand_dims(vector, axis=0)  # Extend the vector to a 1xn shape
                 vectors.append(vector)
             except KeyError:
@@ -78,17 +80,22 @@ class SimilarityCalculator:
 
 
 class KeywordExtractor:
-    def __init__(self, text):
+    def __init__(self, text, embedding_method='model'):
         """
         Initialize the KeywordExtractor with the input text.
 
         :param text: str - The text from which keywords will be extracted.
+        :param embedding_method: str - The method to use for word embedding (default is 'model').
         """
-        self.text = text
-        self.normalizer = Normalizer()
+        self.text           = text
+        self.normalizer     = Normalizer()
         self.word_tokenizer = WordTokenizer()
-        self.stopwords = set(stopwords_list())
-
+        self.stopwords      = set(stopwords_list())
+        if embedding_method=='model':
+            self.word_embedding   = WordEmbedding(model_type='fasttext')
+            self.word_embedding.load_model('../saved_model/word2vec_model.bin')
+            self.embedding_method = embedding_method
+            self.tagger           =  POSTagger(model='../saved_model/pos_tagger.model')
     def extract_keywords(self, nums):
         """
         Extract keywords from the text using frequency analysis
@@ -97,10 +104,79 @@ class KeywordExtractor:
         :return: keywords: list keywords
         """
         words = self.word_tokenizer.tokenize(self.text)
-        words = [word for word in words if word not in self.stopwords]
-        word_counts = Counter(words)
-        keywords = [word for word, _ in word_counts.most_common(nums)]  # Get top 150 keywords
-        return keywords
+        if self.embedding_method != 'model':
+            words_vectors = [word for word in words if word not in self.stopwords]
+            word_counts   = Counter(words)
+            keywords      = [word for word, _ in word_counts.most_common(nums)]  # Get top 150 keywords
+            return keywords
+        else:
+            try:
+                return self.text_rank_nlp(nums)
+            except:
+                words_vectors = [word for word in words if word not in self.stopwords]
+                word_counts = Counter(words)
+                keywords = [word for word, _ in word_counts.most_common(nums)]  # Get top 150 keywords
+                return keywords
+
+
+    def text_rank_nlp(self, keyword_count):
+        grammers = [
+            """
+            NP:
+                    {<NOUN,EZ>?<NOUN.*>}    # Noun(s) + Noun(optional)
+            """,
+            """
+            NP:
+                    {<NOUN.*><ADJ.*>?}    # Noun(s) + Adjective(optional)
+            """
+        ]
+        tokenize_text = [word_tokenize(txt) for txt in sent_tokenize(self.text)]
+        token_tag_list = self.tagger.tag_sents(tokenize_text)
+        all_candidates = set()
+        for grammer in grammers:
+            all_candidates.update(extract_candidates(token_tag_list, grammer))
+        all_candidates = list(all_candidates)
+        all_candidates_vectors = [self.word_embedding[candidate] for candidate in all_candidates]
+        candidates_concatinate = ' '.join(all_candidates)
+        whole_text_vector = self.word_embedding[candidates_concatinate]
+        candidates_sim_whole = cosine_similarity(all_candidates_vectors, whole_text_vector.reshape(1, -1))
+        candidate_sim_candidate = cosine_similarity(all_candidates_vectors)
+        candidates_sim_whole_norm = candidates_sim_whole / np.max(candidates_sim_whole)
+        candidates_sim_whole_norm = 0.5 + (
+                candidates_sim_whole_norm - np.average(candidates_sim_whole_norm)) / np.std(
+            candidates_sim_whole_norm)
+        np.fill_diagonal(candidate_sim_candidate, np.NaN)
+        candidate_sim_candidate_norm = candidate_sim_candidate / np.nanmax(candidate_sim_candidate, axis=0)
+        candidate_sim_candidate_norm = 0.5 + (
+                candidate_sim_candidate_norm - np.nanmean(candidate_sim_candidate_norm, axis=0)) / np.nanstd(
+            candidate_sim_candidate_norm, axis=0)
+        beta = 0.82
+        N = min(len(all_candidates), keyword_count)
+        selected_candidates = []
+        unselected_candidates = [i for i in range(len(all_candidates))]
+        best_candidate = np.argmax(candidates_sim_whole_norm)
+        selected_candidates.append(best_candidate)
+        unselected_candidates.remove(best_candidate)
+
+        for i in range(N - 1):
+            selected_vec = np.array(selected_candidates)
+            unselected_vec = np.array(unselected_candidates)
+
+            unselected_candidate_sim_whole_norm = candidates_sim_whole_norm[unselected_vec, :]
+
+            dist_between = candidate_sim_candidate_norm[unselected_vec][:, selected_vec]
+
+            if dist_between.ndim == 1:
+                dist_between = dist_between[:, np.newaxis]
+
+            best_candidate = np.argmax(
+                beta * unselected_candidate_sim_whole_norm - (1 - beta) * np.max(dist_between, axis=1).reshape(-1,
+                                                                                                               1))
+            best_index = unselected_candidates[best_candidate]
+            selected_candidates.append(best_index)
+            unselected_candidates.remove(best_index)
+        return [all_candidates[i] for i in selected_candidates]
+
 
 
 class ClusterModel:

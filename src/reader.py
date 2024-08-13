@@ -177,7 +177,7 @@ class ClusteringResumeReader(ResumeReader):
 
 
 class SingleResumeReader:
-    def __init__(self, job_description_path, resume_path, nums=100):
+    def __init__(self, job_description_path, resume_path, nums=20):
         """
         Initialize the SingleResumeReader with the job description path, resume directory, and the number of keywords.
 

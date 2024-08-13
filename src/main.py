@@ -33,9 +33,9 @@ def main(train=False):
     # Save the models
     cluster_model.save('../saved_model')
 
-    print(1)
+    print("DONE")
 
 
 if __name__ == "__main__":
-    main(train=True)
-    # main(train=False)
+    # main(train=True)
+    main(train=False)
