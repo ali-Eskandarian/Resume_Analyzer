@@ -9,6 +9,13 @@ import joblib
 
 class SimilarityCalculator:
     def __init__(self, resume_keywords, job_description_keywords, embedding_method='model'):
+        """
+        Initialize the SimilarityCalculator with the resume keywords, job description keywords, and embedding method.
+
+        :param resume_keywords: list - A list of keywords extracted from the resume.
+        :param job_description_keywords: list - A list of keywords extracted from the job description.
+        :param embedding_method: str - The method to use for word embedding (default is 'model').
+        """
         self.resume_keywords = resume_keywords
         self.job_description_keywords = job_description_keywords
         if embedding_method=='model':
@@ -72,6 +79,11 @@ class SimilarityCalculator:
 
 class KeywordExtractor:
     def __init__(self, text):
+        """
+        Initialize the KeywordExtractor with the input text.
+
+        :param text: str - The text from which keywords will be extracted.
+        """
         self.text = text
         self.normalizer = Normalizer()
         self.word_tokenizer = WordTokenizer()
@@ -93,6 +105,11 @@ class KeywordExtractor:
 
 class ClusterModel:
     def __init__(self, min_cluster_size=4):
+        """
+        Initialize the ClusterModel with the minimum cluster size.
+
+        :param min_cluster_size: int - The minimum number of data points required to form a cluster (default is 4).
+        """
         self.min_cluster_size = min_cluster_size
         self.models = {
             'KMeans': KMeans(self.min_cluster_size),
