@@ -4,22 +4,36 @@ from name_detection.persian_names import extract_names
 from skills import ds_keywords, web_keywords, android_keywords, ios_keywords, uiux_keywords, devops_keywords
 import umap
 import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+
 
 def flatten_list(nested_list):
-    """Flatten a nested list."""
+    """
+    Flatten a nested list.
+
+    :param nested_list: The input list
+    :return: flatten the list
+    """
     return [item for sublist in nested_list for item in sublist] if isinstance(nested_list, list) else [nested_list]
 
 
-def cleanResume(resumeText):
-    resumeText = re.sub('http\S+\s*', ' ', resumeText)  # remove URLs
-    resumeText = re.sub('RT|cc', ' ', resumeText)  # remove RT and cc
-    resumeText = re.sub('#\S+', '', resumeText)  # remove hashtags
-    resumeText = re.sub('@\S+', '  ', resumeText)  # remove mentions
-    resumeText = re.sub('[%s]' % re.escape("""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""), ' ',
-                        resumeText)  # remove punctuations
-    resumeText = re.sub(r'[^\x00-\x7f]', r' ', resumeText)
-    resumeText = re.sub('\s+', ' ', resumeText)  # remove extra whitespace
-    return resumeText
+def cleanResume(resumetext):
+    """
+    Clean the text
+
+    :param resumetext: The input text containing information
+    :return: A clean text ready to use
+    """
+    resumetext = re.sub('http\S+\s*', ' ', resumetext)  # remove URLs
+    resumetext = re.sub('RT|cc', ' ', resumetext)  # remove RT and cc
+    resumetext = re.sub('#\S+', '', resumetext)  # remove hashtags
+    resumetext = re.sub('@\S+', '  ', resumetext)  # remove mentions
+    resumetext = re.sub('[%s]' % re.escape("""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""), ' ',
+                        resumetext)  # remove punctuations
+    resumetext = re.sub(r'[^\x00-\x7f]', r' ', resumetext)
+    resumetext = re.sub('\s+', ' ', resumetext)  # remove extra whitespace
+    return resumetext
 
 
 def read_pdf(file_path: str) -> str:
@@ -54,38 +68,47 @@ def preprocess_text(text: str) -> str:
 
 
 def extract_contact_info(text):
-    """Extract contact information from the resume text."""
+    """
+    Extract contact information from the resume text.
+
+    :param text: The input text containing skill information
+    :return: A dictionary containing the information
+    """
     email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
     phone_pattern = r'\b\d{11}\b'
 
     email = re.search(email_pattern, text)
     phone = re.search(phone_pattern, text)
-    name = extract_names(text)
+    name  = extract_names(text)
 
     contact_info = {
         'email': email.group() if email else None,
         'phone': phone.group() if phone else None,
-        'name': name
+        'name' : name
     }
 
     return contact_info
 
 
 def extract_age(text):
-    """Extract age from the resume text."""
-    age_pattern = r'\b([\d۰-۹]{1,2})/([\d۰-۹]{4})\b'  # Matches formats like 8/2000, 12/1375, or ۸/۲۰۰۰, ۱۲/۱۳۷۵
-    year_pattern = r'\b([\d۰-۹]{4})\b'  # Matches 4-digit years like 1403 or ۱۳۸۲
+    """
+    Extract age from the resume text
+
+    :param text: The input text containing skill information
+    :return: An integer as age
+    """
+    age_pattern      = r'\b([\d۰-۹]{1,2})/([\d۰-۹]{4})\b'  # Matches formats like 8/2000, 12/1375, or ۸/۲۰۰۰, ۱۲/۱۳۷۵
+    year_pattern     = r'\b([\d۰-۹]{4})\b'  # Matches 4-digit years like 1403 or ۱۳۸۲
     age_year_pattern = r'\b([\d۰-۹]{2})\b'  # Matches 4-digit years like 1403 or ۱۳۸۲
 
-    age_match = re.search(age_pattern, text)
-    year_matches = re.findall(year_pattern, text)  # Find all 4-digit numbers
+    age_match                = re.search(age_pattern, text)
+    year_matches             = re.findall(year_pattern, text)  # Find all 4-digit numbers
     age_year_pattern_matches = re.findall(age_year_pattern, text)  # Find all 2-digit numbers
 
     current_year = 1403
     calculated_age = None
     if age_match:
         calculated_age = int(age_match.group(1))  # Extracted age
-        birth_year = int(age_match.group(2))  # Extracted birth year
         if 18 < calculated_age < 40:  # Check if age is within the specified range
             return calculated_age
         else:
@@ -109,39 +132,63 @@ def extract_age(text):
 
 
 def extract_quality(text, skill):
-    """Extract the quality of a skill from the text."""
-    # Define patterns to search for quality indicators
-    quality_patterns = r'(?<=\b' + re.escape(
-        skill) + r'\b).*?(\d|کم|مبتدی|متوسط|زیاد|پیشرفته|beginner|intermediate|advance)'
+    """
+    Extract the quality of a skill from the text.
 
+    :param text: The input text containing skill information
+    :param skill: The specific skill to search for
+    :return: An integer representing the skill quality (1: beginner, 2: intermediate, 3: advanced)
+    """
+    # Normalize the text by replacing Persian numbers with Arabic numbers
+    text = text.replace('۰', '0').replace('۱', '1').replace('۲', '2').replace('۳', '3').replace('۴', '4') \
+        .replace('۵', '5').replace('۶', '6').replace('۷', '7').replace('۸', '8').replace('۹', '9')
+
+    # Define quality mappings
     quality_mapping = {
-        'کم': 1, 'مبتدی': 1, 'beginner': 1,
-        'متوسط': 2, 'intermediate': 2, 'advance': 3,
-        'زیاد': 3, 'پیشرفته': 3
+        'مبتدی'  : 1, 'کم'          : 1, 'اشنا'  : 1, 'آشنا'   : 1, 'beginner': 1,
+        'متوسط'  : 2, 'intermediate': 2,
+        'پیشرفته': 3, 'حرفه ای'     : 3, 'حرفه‌ای': 3, 'advance': 3, 'advanced': 3
     }
 
-    match = re.search(quality_patterns, text)
+    # Create a pattern to match the skill and its quality
+    pattern = rf'\b{re.escape(skill)}[\s|]*([^\n|]*)'
+    match   = re.search(pattern, text, re.IGNORECASE)
+
     if match:
-        quality_str = match.group(0).strip()
-        # Check if the quality is numeric or a keyword
+        quality_str = match.group(1).strip()
+
+        # Check for percentage
+        percentage_match = re.search(r'(\d+)%', quality_str)
+        if percentage_match:
+            percentage = int(percentage_match.group(1))
+            if percentage <= 33:
+                return 1
+            elif percentage <= 66:
+                return 2
+            else:
+                return 3
+
+        # Check for quality keywords
         for key, value in quality_mapping.items():
             if key in quality_str:
                 return value
-        if quality_str.isdigit():
-            return int(quality_str)
 
-    return None  # Return None if no quality found
+        # If no quality is found, assume it's intermediate
+        return 2
+
+    # If the skill is not found, return None
+    return None
 
 
 def extract_skills(text):
     """Extract skills from the resume text based on predefined categories."""
     skills = {
-        'Data Science': [],
-        'Web Development': [],
+        'Data Science'       : [],
+        'Web Development'    : [],
         'Android Development': [],
-        'iOS Development': [],
-        'UI/UX Design': [],
-        'DevOps': []
+        'iOS Development'    : [],
+        'UI/UX Design'       : [],
+        'DevOps'             : []
     }
 
     skills_quality = {}  # Dictionary to hold skills and their quality
@@ -197,27 +244,41 @@ def extract_skills(text):
 
 
 
-def visualize_data_with_umap(data, output_filename='umap_visualization.png'):
-    # Visualize the data using UMAP and save the plot as a PNG file.
+def visualize_data_with_umap(data, output_filename='../umap_visualization.png'):
+    """
+    Calculate a UMAP and save
+
+    :param data: A pandas dataframe
+    :param output_filename: The dir to save
+    :return: ---
+    """
+    # Calculate bin ranges based on the maximum value in the 'score' column
+    max_score = data['score'].max()
+    bins      = [0, int(max_score/3), int(2*max_score/3), int(max_score)]
+
+    # Encode 'score' column into grades A, B, C based on the calculated score ranges
+    data['grades'] = pd.cut(data['score'], bins=bins, labels=['A', 'B', 'C'])
 
     # If necessary, you can drop non-numeric columns or encode them
     numeric_data = data.select_dtypes(include=[float, int])
 
-    # Initialize UMAP
-    reducer = umap.UMAP()
-
-    # Fit and transform the data
+    # Initialize UMAP with adjusted parameters (not optimized)
+    reducer = umap.UMAP(metric='cosine',n_neighbors=5, min_dist=0.1)
     embedding = reducer.fit_transform(numeric_data)
 
-    # Create a scatter plot of the UMAP embedding
+    # Create a scatter plot of the UMAP embedding with color-coded grades
     plt.figure(figsize=(10, 8))
-    plt.scatter(embedding[:, 0], embedding[:, 1], s=5, alpha=0.5)
+    scatter = plt.scatter(embedding[:, 0], embedding[:, 1], c=pd.factorize(data['grades'])[0], cmap='viridis', s=50, alpha=0.5)
 
-    # Set labels and title
-    plt.title('UMAP Visualization of Data')
+    plt.title('UMAP Visualization of Data with Grades')
     plt.xlabel('UMAP 1')
     plt.ylabel('UMAP 2')
 
-    # Save the plot as a PNG file
+    cb = plt.colorbar(scatter)
+    cb.set_ticks(np.arange(3))
+    cb.set_ticklabels(['C', 'B', 'A'])
+
+    legend_labels = ['0 - {:.2f}'.format(max_score/3), '{:.2f} - {:.2f}'.format(max_score/3, 2*max_score/3), '{:.2f} - {:.2f}'.format(2*max_score/3, max_score)]
+    plt.legend(handles=scatter.legend_elements()[0], labels=legend_labels, title='Score Ranges', loc='upper right')
     plt.savefig(output_filename)
-    plt.close()  # Close the plot to free memory
+    plt.close()

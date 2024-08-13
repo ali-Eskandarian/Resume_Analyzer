@@ -36,14 +36,20 @@ some_prefixes_fa = [normalizer.normalize(name) for name in some_prefixes_fa]
 
 some_suffixes_fa = [
     'پور', 'زاده', 'فر', 'فرد', 'ان', 'کیا', 'راد', 'زند', 'خواه', 'نیا', "نی", "دی",
-    'مهر', 'آذر', 'صدر', 'کهن', 'نژاد', 'بیات', 'یکتا', 'ثابت', 'آزاد', "کار",
+    'مهر', 'آذر', 'صدر', 'کهن', 'نژاد', 'بیات', 'یکتا', 'ثابت', 'آزاد', "کار","یان",
     'زارع', 'مقدم', 'روشن', 'تبار', 'راشد', 'دانا', 'زادگان', 'منش', 'یار', 'لو'
 ]
 some_suffixes_fa = [normalizer.normalize(name) for name in some_suffixes_fa]
 
 
 def is_valid_name(name1, name2):
-    """Check if the name is a valid Persian first or last name."""
+    """
+    Check if the provided names are valid Persian first or last names.
+
+    :param name1: str - The first name to check.
+    :param name2: str - The second name to check.
+    :return: str or int - The normalized valid name if found, otherwise 0.
+    """
     if normalizer.normalize(name1) in names:
         return normalizer.normalize(name1)
     elif normalizer.normalize(name2) in names:
@@ -53,7 +59,13 @@ def is_valid_name(name1, name2):
 
 
 def is_valid_lastname(name1, name2):
-    """Check if the name is a valid Persian first or last name."""
+    """
+    Check if the provided names are valid Persian last names.
+
+    :param name1: str - The first name to check.
+    :param name2: str - The second name to check.
+    :return: str or int - The valid last name if found, otherwise 0.
+    """
     name1, name2 = normalizer.normalize(name1), normalizer.normalize(name2)
     if any(name in name1 for name in names if len(name1) > len(name)):
         return name1
@@ -72,13 +84,21 @@ def is_valid_lastname(name1, name2):
 def remove_english_and_numbers(text):
     """
     Remove all English letters and numbers from the input text.
+
+    :param text: str - The input text from which English letters and numbers will be removed.
+    :return: str - The cleaned text with English letters and numbers removed.
     """
     cleaned_text = re.sub(r'[A-Za-z0-9!@$_%]+', '', text)
     return cleaned_text
 
 
 def extract_names(text):
-    """Extract first and last names from the given text using defined prefixes and suffixes."""
+    """
+    Extract first and last names from the given text using defined prefixes and suffixes.
+
+    :param text: str - The input text from which names will be extracted.
+    :return: str - A string containing the recognized first and last names, or "Not Recognized" if no names are found.
+    """
     text = remove_english_and_numbers(text)
     words = text.split()
 
@@ -95,7 +115,7 @@ def extract_names(text):
     return "Not Recognized"
 
 
-document = fitz.open('/home/alioto/PycharmProjects/Resume_Analyzer/resumes/نرجس_محسنی پور_Persian_Resume.pdf')
+document = fitz.open('/home/alioto/PycharmProjects/Resume_Analyzer/resumes/علی_اسکندریان_Persian_Resume.pdf')
 text1 = "".join(page.get_text() for page in document)
 
 # print(extract_names(text1))

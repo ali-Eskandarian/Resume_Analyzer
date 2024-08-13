@@ -16,7 +16,12 @@ class SimilarityCalculator:
             self.word_embedding.load_model('../saved_model/word2vec_model.bin')
             self.embedding_method = embedding_method
     def vectorize_keywords(self, keywords):
-        """Get the word vectors for each keyword in a 1xn shape."""
+        """
+        Get the word vectors for each keyword in a 1xn shape
+
+        :param keywords: string word
+        :return: vectors: array embedding
+        """
         vectors = []
         for keyword in keywords:
             try:
@@ -28,7 +33,11 @@ class SimilarityCalculator:
         return vectors
 
     def calculate_cosine_similarity(self):
-        """Calculate cosine similarity between resume and job description keywords."""
+        """
+        Calculate cosine similarity between resume and job description keywords
+
+        :return: similarity: float
+        """
 
         if self.embedding_method == 'model':
             resume_vector = self.vectorize_keywords(self.resume_keywords)
@@ -51,7 +60,11 @@ class SimilarityCalculator:
             return cosine_similarity([resume_vector], [job_desc_vector])[0][0]
 
     def calculate_jaccard_similarity(self):
-        """Calculate Jaccard similarity between resume and job description keywords."""
+        """
+        Calculate Jaccard similarity between resume and job description keywords
+
+        :return: similarity: float
+        """
         intersection = len(set(self.resume_keywords) & set(self.job_description_keywords))
         union = len(set(self.resume_keywords) | set(self.job_description_keywords))
         return intersection / union if union != 0 else 0
@@ -65,7 +78,12 @@ class KeywordExtractor:
         self.stopwords = set(stopwords_list())
 
     def extract_keywords(self, nums):
-        """Extract keywords from the text using frequency analysis."""
+        """
+        Extract keywords from the text using frequency analysis
+
+        :param nums: number nums
+        :return: keywords: list keywords
+        """
         words = self.word_tokenizer.tokenize(self.text)
         words = [word for word in words if word not in self.stopwords]
         word_counts = Counter(words)
@@ -84,7 +102,13 @@ class ClusterModel:
         self.data_model = None
 
     def forward(self, data):
-        """Fit the clustering models to the provided data."""
+        """
+        Fit the clustering models to the provided data
+
+        :param data: pandas dataframe
+        :return: data: pandas dataframe add clusters
+        """
+
         # self.data_model = data.drop('resume', axis=1).values
         self.data_model = data[['cosine_sim', 'jaccard_sim','score']]
 
@@ -98,6 +122,16 @@ class ClusterModel:
         return data
 
     def fit_predict(self, data):
+        """
+        Fit the clustering models to the provided data and get the best clusters.
+
+        :param data: pandas DataFrame containing the data to be clustered
+        :return: A tuple containing:
+            - kmeans_scores (dict): A dictionary with cluster labels as keys and their average similarity scores as values.
+            - hdbscan_scores (dict): A dictionary with cluster labels as keys and their average similarity scores as values.
+            - best_kmeans_rows (DataFrame): A DataFrame containing the rows with the highest overall similarity score in the best KMeans cluster.
+            - best_hdbscan_rows (DataFrame): A DataFrame containing the rows with the highest overall similarity score in the best HDBSCAN cluster.
+        """
         final_data = self.forward(data)
         kmeans_scores,    hdbscan_scores    = {}, {}
 
@@ -121,12 +155,21 @@ class ClusterModel:
         return kmeans_scores, hdbscan_scores, best_kmeans_rows, best_hdbscan_rows
 
     def save(self, directory):
-        """Save all fitted models to the specified directory."""
+        """
+        Save all fitted models to the specified directory
+
+        :param directory: saving directory
+        """
         for model_name, model in self.models.items():
             joblib.dump(model, f"{directory}/{model_name}_model.pkl")
 
     def predict(self, new_data):
-        """Predict the cluster for a new data point using all models."""
+        """
+        Predict the cluster for a new data point using all models
+
+        :param new_data: pandas dataframe data
+        :return predictions: dictionary of predicted cluster
+        """
         predictions = {}
         for model_name, model in self.models.items():
             if model_name == 'KMeans':

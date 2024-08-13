@@ -1,31 +1,20 @@
 import pandas as pd
-
+from  Embedding_nlp import concatenate_pdfs_and_description
+from hazm import *
 from reader import SingleResumeReader, ClusteringResumeReader
 from models import ClusterModel
-from flask import Flask, request, jsonify
 from utils import visualize_data_with_umap
 
-# app = Flask(__name__)
-
-# UPLOAD_FOLDER = 'uploads'
-# ALLOWED_EXTENSIONS = {'pdf'}
-
-# app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-
-# def allowed_file(filename):
-#     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-# @app.route('/main', methods=['POST'])
-def main():
-    # if 'directory' not in request.form:
-        # return jsonify({'error': 'No directory specified'}), 400
-
-    # directory_path = request.form['directory']
-    
-    resume_path = '../resumes/نرجس_محسنی پور_Persian_Resume.pdf'
+def main(train=False):
+    resume_path = '../resumes/علی_اسکندریان_Persian_Resume.pdf'
     resume_dir = '../resumes/'
     job_description_path = "../description_position.txt"
+
+    if train:
+        concatenate_pdfs_and_description(resume_dir)
+        word_embedding = WordEmbedding(model_type='fasttext')
+        word_embedding.train(dataset_path='../full_text.txt', workers=4, vector_size=32, epochs=100000,
+                            min_count=1, fasttext_type='cbow', dest_path='../saved_model/word2vec_model.bin')
 
     resume_analyzer = SingleResumeReader(job_description_path, resume_path)
     print(resume_analyzer.get_resume_features_as_json())
@@ -35,13 +24,11 @@ def main():
     data.to_csv("output_1.csv")
 
     data = pd.read_csv("output_1.csv")
-    visualize_data_with_umap(data)
+    visualize_data_with_umap(data, output_filename="../umap_visualization.png")
 
     # Initialize the clustering model
     cluster_model = ClusterModel()
 
-    # Fit the model with the data
-    # cluster_model.forward(data)
     kmeans_scores, hdbscan_scores, best_kmeans_rows, best_hdbscan_rows = cluster_model.fit_predict(data)
     # Save the models
     cluster_model.save('../saved_model')
@@ -50,4 +37,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(train=True)
+    # main(train=False)

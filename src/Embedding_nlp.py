@@ -1,10 +1,14 @@
-from hazm import *
 import fitz
 import os
 
 
 def concatenate_pdfs_and_description(directory):
-    """Concatenate text from all PDFs and a description file into a single text file."""
+    """
+    Concatenate text from all PDF files and a description file into a single text file.
+
+    :param directory: str - The path to the directory containing the PDF files and the description file.
+    :return: None - This function does not return a value; it saves the combined text to a file.
+    """
     full_text = ""
 
     # Read all PDF files in the specified directory
@@ -30,8 +34,8 @@ def concatenate_pdfs_and_description(directory):
 
     print(f"Full text saved to {output_path}")
 
-directory_path = '../resumes'  # Replace with your directory path
-concatenate_pdfs_and_description(directory_path)
-wordEmbedding = WordEmbedding(model_type = 'fasttext')
-wordEmbedding.train(dataset_path =  '../full_text.txt' , workers = 4, vector_size = 16, epochs = 50000,
-                    min_count = 1, fasttext_type = 'cbow', dest_path = '../saved_model/word2vec_model.bin')
+# directory_path = '../resumes'
+# concatenate_pdfs_and_description(directory_path)
+# wordEmbedding = WordEmbedding(model_type = 'fasttext')
+# wordEmbedding.train(dataset_path =  '../full_text.txt' , workers = 4, vector_size = 16, epochs = 50000,
+#                     min_count = 1, fasttext_type = 'cbow', dest_path = '../saved_model/word2vec_model.bin')
